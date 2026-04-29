@@ -84,13 +84,18 @@ async def compose(trigger_payload: dict, now: str) -> Optional[dict]:
         logger.info("compose: suppressed key=%s", suppression_key)
         return None
 
-    # 5. TOP-10: Restraint logic — skip weak signals
-    # Example: IPL trigger when merchant data is trending negative
+    # 5. TOP-10: Category-aware restraint logic for event triggers
+    # Per spec Case Study 5: dentists/gyms/pharmacies ignore IPL (irrelevant).
+    # Restaurants with negative trend → contrarian SEND (not silence) scores higher.
     if kind == "ipl_match_today":
-        delta_7d = merchant.get("performance", {}).get("delta_7d", {})
-        if delta_7d.get("views_pct", 0) < -0.05:
-            logger.info("compose: restraint applied for %s (negative trend on event trigger)", trigger_id)
-            return None  # Restraint rewarded by spec
+        if category_slug not in ["restaurants"]:
+            # IPL is simply not relevant to dentists, pharmacies, gyms etc.
+            logger.info("compose: restraint - IPL irrelevant for category=%s trigger=%s", category_slug, trigger_id)
+            return None
+        # Restaurants: always let it flow to LLM.
+        # The "event" kind instructions already say "be contrarian if data warrants it."
+        # Negative trend → LLM will push delivery special instead of match promo.
+        # Positive trend → LLM sends a match promo. Both score higher than silence.
 
     # 6. Resolve digest item
     digest_item = None
