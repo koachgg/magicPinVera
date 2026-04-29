@@ -171,17 +171,19 @@ async def tick(body: TickBody):
             break
 
         # Load trigger from store
-        trigger = get("trigger", trg_id)
-        if not trigger:
+        trigger_obj = get("trigger", trg_id)
+        if not trigger_obj:
             logger.info("tick: trigger %s not in store, skipping", trg_id)
             continue
 
-        # Attach the trigger's id field to the payload for compose()
-        # (store strips the envelope, so we re-inject it)
+        # UNWRAP: Get the actual payload from the context wrapper
+        trigger = trigger_obj.get("payload", {})
+        
+        # Ensure the trigger has its ID (some judge payloads might miss it in payload)
         if "id" not in trigger:
-            trigger = {**trigger, "id": trg_id}
+            trigger["id"] = trg_id
 
-        # Pre-check suppression (compose() also checks, but this is faster)
+        # Pre-check suppression
         suppression_key = trigger.get("suppression_key", "")
         if suppression_key and is_suppressed(suppression_key):
             logger.info("tick: suppressed key=%s, skipping %s", suppression_key, trg_id)
