@@ -74,11 +74,12 @@ async def global_exception_handler(request: Request, exc: Exception):
     )
 
 
-# ── GET /v1/healthz ───────────────────────────────────────────────────────────
-@app.get("/v1/healthz")
+# ── GET|HEAD /v1/healthz ─────────────────────────────────────────────────────
+@app.api_route("/v1/healthz", methods=["GET", "HEAD"])
 async def healthz():
     """
     Returns server status and LIVE context counts.
+    Supports both GET (for humans) and HEAD (for UptimeRobot/Render health checks).
     Judge validates contexts_loaded matches exactly what was pushed.
     """
     return {
