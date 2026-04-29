@@ -101,7 +101,7 @@ async def metadata():
             "grounded in pushed context only. "
             "Gemini 2.0 Flash primary + Groq llama-3.3-70b fallback."
         ),
-        "contact_email": "abhigyan@example.com",
+        "contact_email": "beloabhigyan@gmail.com",
         "version": "1.0.0",
         "submitted_at": "2026-04-29T10:00:00Z",
     }

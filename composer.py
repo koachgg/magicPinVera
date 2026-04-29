@@ -167,21 +167,21 @@ async def compose_reply(
     # ── GAP 1 & 2: 3-tier auto-reply escalation ──────────────────────────────
     is_auto = any(phrase in msg_lower for phrase in _AUTO_REPLY_PHRASES)
     if is_auto:
-        # Count consecutive auto-replies from merchant in recent history
+        # Count consecutive auto-replies in history (including current one)
         auto_count = sum(
-            1 for t in reversed(history[-4:])
+            1 for t in reversed(history[-5:])
             if t.get("role") == "merchant" and
-            any(p in t.get("text", "").lower() for p in _AUTO_REPLY_PHRASES[:2])
+            any(p in t.get("text", "").lower() for p in _AUTO_REPLY_PHRASES)
         )
-        if auto_count == 0:
-            # Tier 1: Flag it to owner
+        if auto_count <= 1:
+            # First auto-reply: Flag it to owner
             return {
                 "action": "send",
                 "body": "Looks like an auto-reply 😊 When the owner sees this, just reply 'Yes' to continue.",
                 "cta": "binary_yes_no",
                 "rationale": "First auto-reply detected; prompting owner"
             }
-        elif auto_count == 1:
+        elif auto_count == 2:
             # Tier 2: Wait 24h
             return {
                 "action": "wait",
