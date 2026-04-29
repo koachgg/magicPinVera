@@ -54,81 +54,71 @@ _ACTION_PHRASES = [
 
 async def compose(trigger_payload: dict, now: str) -> Optional[dict]:
     """
-    Given a trigger payload (from store), build a full dynamic prompt and call LLM.
+    Given a trigger payload, build a full dynamic prompt and call LLM.
     Returns an action dict ready for tick response, or None to skip.
     """
-    trigger = trigger_payload
-    merchant_id: str = trigger.get("merchant_id", "")
-    customer_id: Optional[str] = trigger.get("customer_id")
-    kind: str = trigger.get("kind", "generic")
-    trigger_id: str = trigger.get("id", "")
+    # 1. Resolve IDs from payload (Spec can be inconsistent on nesting)
+    trigger_kind = trigger_payload.get("kind", "generic")
+    trigger_id = trigger_payload.get("id") or trigger_payload.get("payload", {}).get("id", "unknown")
+    merchant_id = trigger_payload.get("merchant_id") or trigger_payload.get("payload", {}).get("merchant_id", "")
+    customer_id = trigger_payload.get("customer_id") or trigger_payload.get("payload", {}).get("customer_id")
+    suppression_key = trigger_payload.get("suppression_key", "")
 
-    # 1. Load merchant context
-    context_obj = get("merchant", merchant_id)
-    if not context_obj:
-        logger.warning("compose: no merchant context for %s", merchant_id)
+    if not merchant_id:
+        logger.warning("compose: missing merchant_id in trigger %s", trigger_id)
+        return None
+
+    # 2. Load context data directly from store.get()
+    merchant_data = get("merchant", merchant_id)
+    if not merchant_data:
+        logger.warning("compose: merchant %s not found in store", merchant_id)
         return None
     
-    # Context objects are stored as {"payload": {...}, "version": ...}
-    merchant_payload = context_obj.get("payload", {})
+    category_slug = merchant_data.get("category_slug", "")
+    category_data = get("category", category_slug) or {}
 
-    # 2. Load category context
-    category_slug: str = merchant_payload.get("category_slug", "")
-    category_obj = get("category", category_slug) or {}
-    category_payload = category_obj.get("payload", {}) if category_obj else {}
-
-    # 3. Load customer context
-    customer_payload: Optional[dict] = None
+    customer_data = None
     if customer_id:
-        cust_obj = get("customer", customer_id)
-        if cust_obj:
-            customer_payload = cust_obj.get("payload", {})
+        customer_data = get("customer", customer_id)
 
-    # 4. Check suppression
-    suppression_key: str = trigger.get("suppression_key", "")
-    if suppression_key and is_suppressed(suppression_key):
-        logger.info("compose: suppressed key=%s", suppression_key)
-        return None
-
-    # 5. TOP-10: Category-aware restraint logic for event triggers
-    if kind == "ipl_match_today":
+    # 2. TOP-10: Category-aware restraint logic
+    if trigger_kind == "ipl_match_today":
         if category_slug not in ["restaurants"]:
-            logger.info("compose: restraint - IPL irrelevant for category=%s trigger=%s", category_slug, trigger_id)
+            logger.info("compose: restraint - IPL irrelevant for %s", category_slug)
             return None
 
-    # 6. Resolve digest item
+    # 3. Resolve research digest item
     digest_item = None
-    top_item_id = trigger.get("payload", {}).get("top_item_id")
-    if top_item_id and category_payload.get("digest"):
-        for item in category_payload["digest"]:
+    top_item_id = trigger_payload.get("payload", {}).get("top_item_id")
+    if top_item_id and category_data.get("digest"):
+        for item in category_data["digest"]:
             if item.get("id") == top_item_id:
                 digest_item = item
                 break
 
-    # 7. Build dynamic prompts
-    system_prompt = build_system_prompt(category_slug, category_payload)
+    # 4. Build Prompts
+    system_prompt = build_system_prompt(category_slug, category_data)
     user_prompt = build_user_prompt(
-        kind=kind,
-        merchant=merchant_payload,
-        trigger=trigger,
-        customer=customer_payload,
+        kind=trigger_kind,
+        merchant=merchant_data,
+        trigger=trigger_payload,
+        customer=customer_data,
         digest_item=digest_item,
         merchant_id=merchant_id,
-        category=category_payload,
+        category=category_data,
     )
 
-    # 8. Call LLM
+    # 5. Call LLM
     response_text = await call_llm(system_prompt, user_prompt)
     if not response_text:
-        return build_fallback_action(merchant_payload, trigger, merchant_id)
+        return build_fallback_action(merchant_data, trigger_payload, merchant_id)
 
-    # 9. Parse LLM output
-    action = parse_llm_response(response_text)
-    if not action or not action.get("body"):
-        return build_fallback_action(merchant_payload, trigger, merchant_id)
+    action_data = parse_llm_response(response_text)
+    if not action_data or not action_data.get("body"):
+        return build_fallback_action(merchant_data, trigger_payload, merchant_id)
 
-    # 10. Enforce hard constraints
-    body = enforce_body_constraints(action["body"])
+    # 6. Enforce hard constraints
+    body_text = enforce_body_constraints(action_data["body"])
 
     return {
         "conversation_id": f"conv_{merchant_id}_{trigger_id}",
@@ -136,12 +126,12 @@ async def compose(trigger_payload: dict, now: str) -> Optional[dict]:
         "customer_id": customer_id,
         "send_as": "merchant_on_behalf" if customer_id else "vera",
         "trigger_id": trigger_id,
-        "template_name": f"vera_{kind}_v1",
-        "template_params": extract_template_params(action, merchant_payload),
-        "body": body,
-        "cta": action.get("cta", "open_ended"),
+        "template_name": f"vera_{trigger_kind}_v1",
+        "template_params": extract_template_params(action_data, merchant_data),
+        "body": body_text,
+        "cta": action_data.get("cta", "open_ended"),
         "suppression_key": suppression_key,
-        "rationale": action.get("rationale", f"{kind} trigger processed"),
+        "rationale": action_data.get("rationale", f"{trigger_kind} trigger processed"),
     }
 
 
@@ -154,227 +144,126 @@ async def compose_reply(
     message: str,
     turn_number: int,
 ) -> dict:
-    """
-    Handles all /v1/reply scenarios with full spec compliance:
-    - Auto-reply: 3-tier escalation (send → wait 24h → end)
-    - Opt-out: immediate end
-    - Intent transition: action mode (no more qualifying questions)
-    - Default: continue conversation naturally via LLM
-    """
+    """Handles all /v1/reply scenarios with full spec compliance."""
     history = get_turns(conversation_id)
-    
-    # Load merchant context robustly
-    merchant_obj = get("merchant", merchant_id) or {}
-    merchant_payload = merchant_obj.get("payload", {})
-    
-    # Load category context robustly
-    category_slug = merchant_payload.get("category_slug", "")
-    category_obj = get("category", category_slug) or {}
-    category_payload = category_obj.get("payload", {})
-
     msg_lower = message.lower().strip()
 
-    # ── GAP 1 & 2: 3-tier auto-reply escalation ──────────────────────────────
+    # Load merchant data
+    merchant_data = get("merchant", merchant_id) or {}
+    category_slug = merchant_data.get("category_slug", "")
+    category_data = get("category", category_slug) or {}
+
+    # 1. Auto-reply logic
     is_auto = any(phrase in msg_lower for phrase in _AUTO_REPLY_PHRASES)
     if is_auto:
-        # Count consecutive auto-replies in history (including current one)
-        auto_count = sum(
-            1 for t in reversed(history[-5:])
-            if t.get("role") == "merchant" and
-            any(p in t.get("text", "").lower() for p in _AUTO_REPLY_PHRASES)
-        )
+        auto_count = sum(1 for t in reversed(history[-5:]) if t.get("role") == "merchant" and any(p in t.get("text", "").lower() for p in _AUTO_REPLY_PHRASES))
         if auto_count <= 1:
-            # Tier 1: Flag it to owner
-            return {
-                "action": "send",
-                "body": "Looks like an auto-reply 😊 When the owner sees this, just reply 'Yes' to continue.",
-                "cta": "binary_yes_no",
-                "rationale": "First auto-reply detected; prompting owner"
-            }
+            return {"action": "send", "body": "Looks like an auto-reply 😊 Reply 'Yes' to continue.", "cta": "binary_yes_no", "rationale": "Auto-reply Tier 1"}
         elif auto_count == 2:
-            # Tier 2: Wait 24h
-            return {
-                "action": "wait",
-                "wait_seconds": 86400,
-                "rationale": "Second consecutive auto-reply; owner not at phone. Waiting 24h."
-            }
+            return {"action": "wait", "wait_seconds": 86400, "rationale": "Auto-reply Tier 2"}
         else:
-            # Tier 3: End conversation
-            return {
-                "action": "end",
-                "rationale": "Three or more consecutive auto-replies. Zero engagement. Closing."
-            }
+            return {"action": "end", "rationale": "Auto-reply Tier 3"}
 
-    # ── GAP 4: Expanded opt-out detection ─────────────────────────────────────
+    # 2. Opt-out logic
     if any(p in msg_lower for p in _OPT_OUT_PHRASES):
-        return {
-            "action": "end",
-            "rationale": "Merchant explicitly opted out. Suppressing all future messages."
-        }
+        return {"action": "end", "rationale": "Merchant opted out."}
 
-    # ── GAP 3: Intent transition detection ────────────────────────────────────
+    # 3. Intent transition
     is_action = any(p in msg_lower for p in _ACTION_PHRASES)
 
-    # Build reply prompt (all in prompts.py — no hardcoding)
+    # 4. LLM Generation
+    system_prompt = build_system_prompt(category_slug, category_data)
     user_prompt = build_reply_prompt(
         message=message,
         history=history,
-        merchant=merchant_payload,
+        merchant=merchant_data,
         category_slug=category_slug,
-        category=category_payload,
+        category=category_data,
         is_action=is_action,
     )
-    system_prompt = build_system_prompt(category_slug, category_payload)
 
     response_text = await call_llm(system_prompt, user_prompt)
     if not response_text:
-        return {
-            "action": "send",
-            "body": "Got it — I'll follow up shortly.",
-            "cta": "none",
-            "rationale": "LLM fallback"
-        }
+        return {"action": "send", "body": "Got it, I'll follow up shortly.", "cta": "none", "rationale": "LLM fallback"}
 
-    parsed = parse_llm_response(response_text)
-    if parsed and parsed.get("action") == "send" and parsed.get("body"):
-        parsed["body"] = enforce_body_constraints(parsed["body"])
-    return parsed or {"action": "end", "rationale": "Parse failure — closing safely"}
+    action_data = parse_llm_response(response_text)
+    if action_data and action_data.get("action") == "send" and action_data.get("body"):
+        action_data["body"] = enforce_body_constraints(action_data["body"])
+    
+    return action_data or {"action": "end", "rationale": "Parse failure"}
 
 
 # ── LLM callers ───────────────────────────────────────────────────────────────
 
 async def call_llm(system: str, user: str) -> Optional[str]:
-    # Attempt 1: Gemini
-    result = await _call_gemini(system, user)
-    if result: return result
-
-    # Attempt 2: Gemini retry after brief wait
-    await asyncio.sleep(2.0)
-    result = await _call_gemini(system, user)
-    if result: return result
-
-    # Attempt 3: Groq fallback
-    return await _call_groq(system, user)
-
-
-async def _call_gemini(system: str, user: str) -> Optional[str]:
     api_key = os.environ.get("GEMINI_API_KEY", "")
-    if not api_key:
-        logger.warning("GEMINI_API_KEY not set")
-        return None
+    if not api_key: return None
     try:
         genai.configure(api_key=api_key)
         model = genai.GenerativeModel(model_name=GEMINI_MODEL_NAME, system_instruction=system)
-
         loop = asyncio.get_event_loop()
         response = await loop.run_in_executor(
             None,
             lambda: model.generate_content(
                 user,
-                generation_config=genai.types.GenerationConfig(
-                    temperature=0.1,
-                    max_output_tokens=1024,
-                    response_mime_type="application/json",
-                ),
-                safety_settings={
-                    "HARM_CATEGORY_HARASSMENT": "BLOCK_NONE",
-                    "HARM_CATEGORY_HATE_SPEECH": "BLOCK_NONE",
-                    "HARM_CATEGORY_SEXUALLY_EXPLICIT": "BLOCK_NONE",
-                    "HARM_CATEGORY_DANGEROUS_CONTENT": "BLOCK_NONE",
-                }
+                generation_config=genai.types.GenerationConfig(temperature=0.1, max_output_tokens=1024, response_mime_type="application/json"),
+                safety_settings={"HARM_CATEGORY_HARASSMENT": "BLOCK_NONE", "HARM_CATEGORY_HATE_SPEECH": "BLOCK_NONE", "HARM_CATEGORY_SEXUALLY_EXPLICIT": "BLOCK_NONE", "HARM_CATEGORY_DANGEROUS_CONTENT": "BLOCK_NONE"}
             )
         )
-
-        # OBSERVABILITY: log finish reason
-        if response.candidates:
-            finish_reason = response.candidates[0].finish_reason.name
-            if finish_reason != "STOP":
-                logger.warning("Gemini finish_reason=%s (possible safety block)", finish_reason)
-
-        if response and response.text:
-            return response.text
-        return None
-    except Exception as exc:
-        logger.warning("Gemini SDK Error: %s", exc)
-        return None
-
+        if response and response.text: return response.text
+        return await _call_groq(system, user)
+    except Exception:
+        return await _call_groq(system, user)
 
 async def _call_groq(system: str, user: str) -> Optional[str]:
     api_key = os.environ.get("GROQ_API_KEY", "")
     if not api_key: return None
     try:
-        payload = {
-            "model": GROQ_MODEL,
-            "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
-            "temperature": 0.0,
-            "response_format": {"type": "json_object"}
-        }
+        payload = {"model": GROQ_MODEL, "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}], "temperature": 0.0, "response_format": {"type": "json_object"}}
         async with httpx.AsyncClient(timeout=GROQ_TIMEOUT) as client:
-            resp = await client.post(
-                GROQ_ENDPOINT, json=payload,
-                headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-            )
-            if resp.status_code == 200:
-                return resp.json()["choices"][0]["message"]["content"]
+            resp = await client.post(GROQ_ENDPOINT, json=payload, headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"})
+            if resp.status_code == 200: return resp.json()["choices"][0]["message"]["content"]
         return None
-    except Exception:
-        return None
+    except Exception: return None
 
 
-# ── Utilities (Parsing & Constraints) ─────────────────────────────────────────
+# ── Utilities ─────────────────────────────────────────────────────────────────
 
 def parse_llm_response(text: str) -> Optional[dict]:
     if not text: return None
     text = text.strip()
-
     try: return json.loads(text)
     except: pass
-
-    cleaned = re.sub(r"^```(?:json)?\s*", "", text, flags=re.IGNORECASE)
-    cleaned = re.sub(r"\s*```$", "", cleaned).strip()
-    try: return json.loads(cleaned)
-    except: pass
-
-    match = re.search(r"\{[\s\S]*\}", cleaned)
+    match = re.search(r"\{[\s\S]*\}", text)
     if match:
         try: return json.loads(match.group())
         except: pass
-
-    logger.error("parse_llm_response: FAILED. Length=%d. Raw: %s", len(text), text[:1000])
     return None
-
 
 def enforce_body_constraints(body: str) -> str:
     body = re.sub(r"https?://\S+|www\.\S+", "", body)
-    body = re.sub(r" {2,}", " ", body).strip()
-    return body[:320]
+    return re.sub(r" {2,}", " ", body).strip()[:320]
 
-
-# ── TOP-10 #3: Smart fallback uses real active offer ─────────────────────────
-
-def build_fallback_action(merchant_payload: dict, trigger: dict, merchant_id: str) -> dict:
-    identity = merchant_payload.get("identity", {})
+def build_fallback_action(merchant_data: dict, trigger: dict, merchant_id: str) -> dict:
+    identity = merchant_data.get("identity", {})
     owner = identity.get("owner_first_name", "") or identity.get("name", "Merchant")
-    # Use real active offer name (Top-10 spec requirement)
-    offers = [o["title"] for o in merchant_payload.get("offers", []) if o.get("status") == "active"]
+    offers = [o["title"] for o in merchant_data.get("offers", []) if o.get("status") == "active"]
     offer_str = offers[0] if offers else "your best offer"
-    body = f"{owner}, your {offer_str} is live — want me to push it to nearby customers right now?"
     return {
-        "conversation_id": f"conv_{merchant_id}_{trigger['id']}",
+        "conversation_id": f"conv_{merchant_id}_{trigger.get('id')}",
         "merchant_id": merchant_id,
         "customer_id": trigger.get("customer_id"),
         "send_as": "vera",
-        "trigger_id": trigger["id"],
+        "trigger_id": trigger.get("id"),
         "template_name": "vera_fallback_v1",
         "template_params": [owner, offer_str],
-        "body": body[:320],
+        "body": f"{owner}, your {offer_str} is live — want to push it?",
         "cta": "binary_yes_no",
         "suppression_key": trigger.get("suppression_key", ""),
-        "rationale": "LLM fallback — using active offer + owner name",
+        "rationale": "LLM fallback",
     }
 
-
-def extract_template_params(action: dict, merchant_payload: dict) -> list[str]:
-    identity = merchant_payload.get("identity", {})
+def extract_template_params(action: dict, merchant_data: dict) -> list[str]:
+    identity = merchant_data.get("identity", {})
     owner = identity.get("owner_first_name", "") or identity.get("name", "")
     return [owner, action.get("body", "")[:100], action.get("cta", "")]
