@@ -93,7 +93,7 @@ async def healthz():
 async def metadata():
     """Static team + model metadata."""
     return {
-        "team_name": "vera-bot",
+        "team_name": "koachgg",
         "team_members": ["Abhigyan"],
         "model": "gemini-flash-latest",
         "approach": (
