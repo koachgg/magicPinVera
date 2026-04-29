@@ -74,9 +74,8 @@ async def compose(trigger_payload: dict, now: str) -> Optional[dict]:
 
     # 2. Load category context
     category_slug: str = merchant_payload.get("category_slug", "")
-    category: dict = get("category", category_slug) or {}
-    if category:
-        category = category.get("payload", {})
+    category_obj = get("category", category_slug) or {}
+    category_payload = category_obj.get("payload", {}) if category_obj else {}
 
     # 3. Load customer context
     customer_payload: Optional[dict] = None
@@ -100,14 +99,14 @@ async def compose(trigger_payload: dict, now: str) -> Optional[dict]:
     # 6. Resolve digest item
     digest_item = None
     top_item_id = trigger.get("payload", {}).get("top_item_id")
-    if top_item_id and category.get("digest"):
-        for item in category["digest"]:
+    if top_item_id and category_payload.get("digest"):
+        for item in category_payload["digest"]:
             if item.get("id") == top_item_id:
                 digest_item = item
                 break
 
     # 7. Build dynamic prompts
-    system_prompt = build_system_prompt(category_slug, category)
+    system_prompt = build_system_prompt(category_slug, category_payload)
     user_prompt = build_user_prompt(
         kind=kind,
         merchant=merchant_payload,
@@ -115,19 +114,18 @@ async def compose(trigger_payload: dict, now: str) -> Optional[dict]:
         customer=customer_payload,
         digest_item=digest_item,
         merchant_id=merchant_id,
-        category=category,
+        category=category_payload,
     )
-
 
     # 8. Call LLM
     response_text = await call_llm(system_prompt, user_prompt)
     if not response_text:
-        return build_fallback_action(merchant, trigger, merchant_id)
+        return build_fallback_action(merchant_payload, trigger, merchant_id)
 
     # 9. Parse LLM output
     action = parse_llm_response(response_text)
     if not action or not action.get("body"):
-        return build_fallback_action(merchant, trigger, merchant_id)
+        return build_fallback_action(merchant_payload, trigger, merchant_id)
 
     # 10. Enforce hard constraints
     body = enforce_body_constraints(action["body"])
@@ -139,7 +137,7 @@ async def compose(trigger_payload: dict, now: str) -> Optional[dict]:
         "send_as": "merchant_on_behalf" if customer_id else "vera",
         "trigger_id": trigger_id,
         "template_name": f"vera_{kind}_v1",
-        "template_params": extract_template_params(action, merchant),
+        "template_params": extract_template_params(action, merchant_payload),
         "body": body,
         "cta": action.get("cta", "open_ended"),
         "suppression_key": suppression_key,
@@ -164,9 +162,15 @@ async def compose_reply(
     - Default: continue conversation naturally via LLM
     """
     history = get_turns(conversation_id)
-    merchant = get("merchant", merchant_id) or {}
-    category_slug = merchant.get("category_slug", "")
-    category = get("category", category_slug) or {}
+    
+    # Load merchant context robustly
+    merchant_obj = get("merchant", merchant_id) or {}
+    merchant_payload = merchant_obj.get("payload", {})
+    
+    # Load category context robustly
+    category_slug = merchant_payload.get("category_slug", "")
+    category_obj = get("category", category_slug) or {}
+    category_payload = category_obj.get("payload", {})
 
     msg_lower = message.lower().strip()
 
@@ -180,7 +184,7 @@ async def compose_reply(
             any(p in t.get("text", "").lower() for p in _AUTO_REPLY_PHRASES)
         )
         if auto_count <= 1:
-            # First auto-reply: Flag it to owner
+            # Tier 1: Flag it to owner
             return {
                 "action": "send",
                 "body": "Looks like an auto-reply 😊 When the owner sees this, just reply 'Yes' to continue.",
@@ -215,12 +219,12 @@ async def compose_reply(
     user_prompt = build_reply_prompt(
         message=message,
         history=history,
-        merchant=merchant,
+        merchant=merchant_payload,
         category_slug=category_slug,
-        category=category,
+        category=category_payload,
         is_action=is_action,
     )
-    system_prompt = build_system_prompt(category_slug, category)
+    system_prompt = build_system_prompt(category_slug, category_payload)
 
     response_text = await call_llm(system_prompt, user_prompt)
     if not response_text:
@@ -348,11 +352,11 @@ def enforce_body_constraints(body: str) -> str:
 
 # ── TOP-10 #3: Smart fallback uses real active offer ─────────────────────────
 
-def build_fallback_action(merchant: dict, trigger: dict, merchant_id: str) -> dict:
-    identity = merchant.get("identity", {})
+def build_fallback_action(merchant_payload: dict, trigger: dict, merchant_id: str) -> dict:
+    identity = merchant_payload.get("identity", {})
     owner = identity.get("owner_first_name", "") or identity.get("name", "Merchant")
     # Use real active offer name (Top-10 spec requirement)
-    offers = [o["title"] for o in merchant.get("offers", []) if o.get("status") == "active"]
+    offers = [o["title"] for o in merchant_payload.get("offers", []) if o.get("status") == "active"]
     offer_str = offers[0] if offers else "your best offer"
     body = f"{owner}, your {offer_str} is live — want me to push it to nearby customers right now?"
     return {
@@ -370,7 +374,7 @@ def build_fallback_action(merchant: dict, trigger: dict, merchant_id: str) -> di
     }
 
 
-def extract_template_params(action: dict, merchant: dict) -> list[str]:
-    identity = merchant.get("identity", {})
+def extract_template_params(action: dict, merchant_payload: dict) -> list[str]:
+    identity = merchant_payload.get("identity", {})
     owner = identity.get("owner_first_name", "") or identity.get("name", "")
     return [owner, action.get("body", "")[:100], action.get("cta", "")]
