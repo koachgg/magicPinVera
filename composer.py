@@ -64,19 +64,26 @@ async def compose(trigger_payload: dict, now: str) -> Optional[dict]:
     trigger_id: str = trigger.get("id", "")
 
     # 1. Load merchant context
-    merchant = get("merchant", merchant_id)
-    if not merchant:
+    context_obj = get("merchant", merchant_id)
+    if not context_obj:
         logger.warning("compose: no merchant context for %s", merchant_id)
         return None
+    
+    # Context objects are stored as {"payload": {...}, "version": ...}
+    merchant_payload = context_obj.get("payload", {})
 
     # 2. Load category context
-    category_slug: str = merchant.get("category_slug", "")
+    category_slug: str = merchant_payload.get("category_slug", "")
     category: dict = get("category", category_slug) or {}
+    if category:
+        category = category.get("payload", {})
 
     # 3. Load customer context
-    customer: Optional[dict] = None
+    customer_payload: Optional[dict] = None
     if customer_id:
-        customer = get("customer", customer_id)
+        cust_obj = get("customer", customer_id)
+        if cust_obj:
+            customer_payload = cust_obj.get("payload", {})
 
     # 4. Check suppression
     suppression_key: str = trigger.get("suppression_key", "")
@@ -85,17 +92,10 @@ async def compose(trigger_payload: dict, now: str) -> Optional[dict]:
         return None
 
     # 5. TOP-10: Category-aware restraint logic for event triggers
-    # Per spec Case Study 5: dentists/gyms/pharmacies ignore IPL (irrelevant).
-    # Restaurants with negative trend → contrarian SEND (not silence) scores higher.
     if kind == "ipl_match_today":
         if category_slug not in ["restaurants"]:
-            # IPL is simply not relevant to dentists, pharmacies, gyms etc.
             logger.info("compose: restraint - IPL irrelevant for category=%s trigger=%s", category_slug, trigger_id)
             return None
-        # Restaurants: always let it flow to LLM.
-        # The "event" kind instructions already say "be contrarian if data warrants it."
-        # Negative trend → LLM will push delivery special instead of match promo.
-        # Positive trend → LLM sends a match promo. Both score higher than silence.
 
     # 6. Resolve digest item
     digest_item = None
@@ -106,17 +106,18 @@ async def compose(trigger_payload: dict, now: str) -> Optional[dict]:
                 digest_item = item
                 break
 
-    # 7. Build dynamic prompts (NO HARDCODING)
+    # 7. Build dynamic prompts
     system_prompt = build_system_prompt(category_slug, category)
     user_prompt = build_user_prompt(
         kind=kind,
-        merchant=merchant,
+        merchant=merchant_payload,
         trigger=trigger,
-        customer=customer,
+        customer=customer_payload,
         digest_item=digest_item,
         merchant_id=merchant_id,
         category=category,
     )
+
 
     # 8. Call LLM
     response_text = await call_llm(system_prompt, user_prompt)
