@@ -156,10 +156,24 @@ async def compose_reply(
     # 1. Auto-reply logic
     is_auto = any(phrase in msg_lower for phrase in _AUTO_REPLY_PHRASES)
     if is_auto:
-        auto_count = sum(1 for t in reversed(history[-5:]) if t.get("role") == "merchant" and any(p in t.get("text", "").lower() for p in _AUTO_REPLY_PHRASES))
-        if auto_count <= 1:
+        # Turn 1 should ALWAYS be Tier 1, regardless of history (safety reset)
+        if turn_number <= 1:
+             return {"action": "send", "body": "Looks like an auto-reply 😊 Reply 'Yes' to continue.", "cta": "binary_yes_no", "rationale": "Auto-reply Tier 1 (Turn 1 Reset)"}
+
+        # Count consecutive auto-replies in current history
+        consecutive_autos = 0
+        for t in reversed(history):
+            if t.get("role") == "merchant" and any(p in t.get("text", "").lower() for p in _AUTO_REPLY_PHRASES):
+                consecutive_autos += 1
+            else:
+                break
+        
+        # Current message is an auto-reply, so add it
+        auto_tier = consecutive_autos + 1
+        
+        if auto_tier == 1:
             return {"action": "send", "body": "Looks like an auto-reply 😊 Reply 'Yes' to continue.", "cta": "binary_yes_no", "rationale": "Auto-reply Tier 1"}
-        elif auto_count == 2:
+        elif auto_tier == 2:
             return {"action": "wait", "wait_seconds": 86400, "rationale": "Auto-reply Tier 2"}
         else:
             return {"action": "end", "rationale": "Auto-reply Tier 3"}

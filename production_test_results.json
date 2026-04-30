@@ -1,0 +1,118 @@
+{
+  "STEP 1 - Healthz": {
+    "status": 200,
+    "body": {
+      "status": "ok",
+      "uptime_seconds": 754,
+      "contexts_loaded": {
+        "category": 1,
+        "merchant": 1,
+        "customer": 0,
+        "trigger": 2
+      }
+    }
+  },
+  "STEP 1 - Metadata": {
+    "status": 200,
+    "body": {
+      "team_name": "koachgg",
+      "contact_email": "beloabhigyan@gmail.com",
+      "bot_name": "VERA",
+      "version": "1.0.0",
+      "features": [
+        "3-tier-auto-reply",
+        "intent-detection",
+        "category-voice",
+        "restraint-logic"
+      ]
+    }
+  },
+  "STEP 2 - Category": {
+    "status": 409,
+    "body": {
+      "detail": {
+        "accepted": false,
+        "reason": "stale_version",
+        "current_version": 1
+      }
+    }
+  },
+  "STEP 3 - Merchant": {
+    "status": 409,
+    "body": {
+      "detail": {
+        "accepted": false,
+        "reason": "stale_version",
+        "current_version": 1
+      }
+    }
+  },
+  "STEP 4 - Trigger": {
+    "status": 409,
+    "body": {
+      "detail": {
+        "accepted": false,
+        "reason": "stale_version",
+        "current_version": 1
+      }
+    }
+  },
+  "STEP 5 - Tick": {
+    "status": 200,
+    "body": {
+      "actions": []
+    }
+  },
+  "STEP 6 - Reply": {
+    "status": 200,
+    "body": {
+      "action": "send",
+      "body": "Dr. Meera, pushing Dental Cleaning @ Rs.299 now. Reply CONFIRM to go live.",
+      "cta": "binary_confirm_cancel",
+      "rationale": "Merchant confirmed drafting the patient WhatsApp, switching to action mode to push the offer live."
+    }
+  },
+  "STEP 7 - Auto 1": {
+    "status": 200,
+    "body": {
+      "action": "end",
+      "rationale": "Auto-reply Tier 3"
+    }
+  },
+  "STEP 8 - Auto 2": {
+    "status": 200,
+    "body": {
+      "action": "end",
+      "rationale": "Previously ended."
+    }
+  },
+  "STEP 9 - IPL Trigger": {
+    "status": 409,
+    "body": {
+      "detail": {
+        "accepted": false,
+        "reason": "stale_version",
+        "current_version": 1
+      }
+    }
+  },
+  "STEP 9 - IPL Tick": {
+    "status": 200,
+    "body": {
+      "actions": []
+    }
+  },
+  "STEP 10 - Final Healthz": {
+    "status": 200,
+    "body": {
+      "status": "ok",
+      "uptime_seconds": 758,
+      "contexts_loaded": {
+        "category": 1,
+        "merchant": 1,
+        "customer": 0,
+        "trigger": 2
+      }
+    }
+  }
+}

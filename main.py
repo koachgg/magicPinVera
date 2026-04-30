@@ -51,9 +51,13 @@ async def healthz():
 async def metadata():
     return {
         "team_name": "koachgg",
+        "team_members": ["Belo Abhigyan"],
+        "model": "gemini-2.0-flash",
+        "approach": "dynamic prompt composer with trigger-kind dispatch, grounded in pushed context",
         "contact_email": "beloabhigyan@gmail.com",
         "bot_name": "VERA",
         "version": "1.0.0",
+        "submitted_at": "2026-04-30T10:00:00Z",
         "features": ["3-tier-auto-reply", "intent-detection", "category-voice", "restraint-logic"]
     }
 
@@ -113,6 +117,8 @@ async def tick(body: TickBody):
         if conv_id in used_conversations: continue
 
         used_conversations.add(conv_id)
+
+        # Success: Mark as suppressed ONLY after successful generation
         if suppression_key:
             suppress(suppression_key)
 
