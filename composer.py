@@ -242,13 +242,14 @@ async def _call_groq(system: str, user: str) -> Optional[str]:
         payload = {
             "model": GROQ_MODEL, 
             "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}], 
-            "temperature": 0.0, 
-            "response_format": {"type": "json_object"}
+            "temperature": 0.0
         }
         async with httpx.AsyncClient(timeout=GROQ_TIMEOUT) as client:
             resp = await client.post(GROQ_ENDPOINT, json=payload, headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"})
             if resp.status_code == 200: 
                 return resp.json()["choices"][0]["message"]["content"]
+            else:
+                logger.error("Groq failed with %s: %s", resp.status_code, resp.text)
         return None
     except Exception as e:
         logger.warning("Groq call failed: %s", e)
