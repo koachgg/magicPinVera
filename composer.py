@@ -27,8 +27,8 @@ logger = logging.getLogger(__name__)
 GEMINI_MODEL_NAME = "gemini-2.0-flash"
 GROQ_MODEL = "llama-3.3-70b-versatile"
 GROQ_ENDPOINT = "https://api.groq.com/openai/v1/chat/completions"
-GEMINI_TIMEOUT = 8.0
-GROQ_TIMEOUT = 6.0
+GEMINI_TIMEOUT = 10.0
+GROQ_TIMEOUT = 10.0
 
 # ── Phrase lists (from spec §6.5) ─────────────────────────────────────────────
 
@@ -229,19 +229,30 @@ async def call_llm(system: str, user: str) -> Optional[str]:
         if response and response.text: return response.text
         return await _call_groq(system, user)
     except Exception as e:
-        logger.warning("Gemini call failed: %s", e)
+        if "429" in str(e):
+            logger.warning("Gemini rate limit hit (429), falling back to Groq")
+        else:
+            logger.warning("Gemini call failed: %s", e)
         return await _call_groq(system, user)
 
 async def _call_groq(system: str, user: str) -> Optional[str]:
     api_key = os.environ.get("GROQ_API_KEY", "")
     if not api_key: return None
     try:
-        payload = {"model": GROQ_MODEL, "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}], "temperature": 0.0, "response_format": {"type": "json_object"}}
+        payload = {
+            "model": GROQ_MODEL, 
+            "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}], 
+            "temperature": 0.0, 
+            "response_format": {"type": "json_object"}
+        }
         async with httpx.AsyncClient(timeout=GROQ_TIMEOUT) as client:
             resp = await client.post(GROQ_ENDPOINT, json=payload, headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"})
-            if resp.status_code == 200: return resp.json()["choices"][0]["message"]["content"]
+            if resp.status_code == 200: 
+                return resp.json()["choices"][0]["message"]["content"]
         return None
-    except Exception: return None
+    except Exception as e:
+        logger.warning("Groq call failed: %s", e)
+        return None
 
 
 # ── Utilities ─────────────────────────────────────────────────────────────────
