@@ -75,9 +75,10 @@ CATEGORY_VOICE: dict[str, str] = {
 _KIND_INSTRUCTIONS: dict[str, str] = {
     "research": (
         "TRIGGER TYPE: research_digest. Lead with the research finding. "
-        "Ground the hook in the digest item (title, source, trial N, patient segment). "
-        "Always source-cite at end (e.g., '— JIDA Oct 2026 p.14'). "
-        "End with one concrete offer from merchant (e.g., '₹299 Dental Cleaning')."
+        "Ground the hook in the digest item (title, trial N, patient segment). "
+        "Transition into one concrete offer from merchant (e.g., '₹299 Dental Cleaning'). "
+        "Always end the body with the source citation in this format: — {source} where source comes from the digest item. "
+        "Example: — JIDA Oct 2026 p.14"
     ),
     "recall": (
         "TRIGGER TYPE: recall_due. This is a customer-facing message. "
@@ -334,8 +335,9 @@ def build_reply_prompt(
         "IMPORTANT: Merchant has explicitly confirmed (said yes/go ahead/confirm). "
         "SWITCH TO ACTION MODE IMMEDIATELY. Do NOT ask another qualifying question. "
         "If the merchant specifically asked you to draft a message (e.g., 'draft the patient WhatsApp'), "
-        "you MUST include the actual drafted text in your response body. Do NOT just say you will do it; DO IT. "
-        f"Example: 'Done. Draft -> Hi [Name], Dr. {owner} clinic: 6-month check-up due. {offer_str}. Reply 1 to book. Send to lapsed patients?'"
+        "you MUST include the actual drafted text in your response body. Use [Name] as a placeholder for the patient name, "
+        f"reference the time context, and end with a confirm ask. Do NOT just say you will do it; DO IT. "
+        f"Example: 'Done. Draft -> Hi [Name], your 6-month check is due at Dr. {owner}'s. {offer_str} this week. Reply 1 to book your slot. Sending to lapsed patients — confirm?'"
     ) if is_action else (
         "Continue the conversation naturally. Honor what the merchant said. Move forward."
     )
