@@ -3,7 +3,7 @@
     "status": 200,
     "body": {
       "status": "ok",
-      "uptime_seconds": 754,
+      "uptime_seconds": 244,
       "contexts_loaded": {
         "category": 1,
         "merchant": 1,
@@ -16,9 +16,15 @@
     "status": 200,
     "body": {
       "team_name": "koachgg",
+      "team_members": [
+        "Belo Abhigyan"
+      ],
+      "model": "gemini-2.0-flash",
+      "approach": "dynamic prompt composer with trigger-kind dispatch, grounded in pushed context",
       "contact_email": "beloabhigyan@gmail.com",
       "bot_name": "VERA",
       "version": "1.0.0",
+      "submitted_at": "2026-04-30T10:00:00Z",
       "features": [
         "3-tier-auto-reply",
         "intent-detection",
@@ -33,7 +39,7 @@
       "detail": {
         "accepted": false,
         "reason": "stale_version",
-        "current_version": 1
+        "current_version": 6
       }
     }
   },
@@ -43,7 +49,7 @@
       "detail": {
         "accepted": false,
         "reason": "stale_version",
-        "current_version": 1
+        "current_version": 6
       }
     }
   },
@@ -67,33 +73,34 @@
     "status": 200,
     "body": {
       "action": "send",
-      "body": "Dr. Meera, pushing Dental Cleaning @ Rs.299 now. Reply CONFIRM to go live.",
+      "body": "Dr. Meera, pushing Dental Cleaning @ Rs.299 to 78 lapsed patients. Reply CONFIRM to go live.",
       "cta": "binary_confirm_cancel",
-      "rationale": "Merchant confirmed drafting the patient WhatsApp, switching to action mode to push the offer live."
+      "rationale": "Merchant has confirmed, so we're proceeding with the next concrete step to send the offer to patients."
     }
   },
   "STEP 7 - Auto 1": {
     "status": 200,
     "body": {
-      "action": "end",
-      "rationale": "Auto-reply Tier 3"
+      "action": "send",
+      "body": "Looks like an auto-reply \ud83d\ude0a Reply 'Yes' to continue.",
+      "cta": "binary_yes_no",
+      "rationale": "Auto-reply Tier 1 (Turn 1 Reset)"
     }
   },
   "STEP 8 - Auto 2": {
     "status": 200,
     "body": {
-      "action": "end",
-      "rationale": "Previously ended."
+      "action": "wait",
+      "wait_seconds": 86400,
+      "rationale": "Auto-reply Tier 2"
     }
   },
   "STEP 9 - IPL Trigger": {
-    "status": 409,
+    "status": 200,
     "body": {
-      "detail": {
-        "accepted": false,
-        "reason": "stale_version",
-        "current_version": 1
-      }
+      "accepted": true,
+      "ack_id": "ack_trg_ipl_v1",
+      "stored_at": "2026-04-30T18:17:49.654312+00:00"
     }
   },
   "STEP 9 - IPL Tick": {
@@ -106,12 +113,12 @@
     "status": 200,
     "body": {
       "status": "ok",
-      "uptime_seconds": 758,
+      "uptime_seconds": 248,
       "contexts_loaded": {
         "category": 1,
         "merchant": 1,
         "customer": 0,
-        "trigger": 2
+        "trigger": 3
       }
     }
   }

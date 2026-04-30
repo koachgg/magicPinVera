@@ -333,7 +333,9 @@ def build_reply_prompt(
     action_instruction = (
         "IMPORTANT: Merchant has explicitly confirmed (said yes/go ahead/confirm). "
         "SWITCH TO ACTION MODE IMMEDIATELY. Do NOT ask another qualifying question. "
-        f"Draft the next concrete step or artifact (e.g., 'Great. Pushing {offer_str} now. Reply CONFIRM to go live.')"
+        "If the merchant specifically asked you to draft a message (e.g., 'draft the patient WhatsApp'), "
+        "you MUST include the actual drafted text in your response body. Do NOT just say you will do it; DO IT. "
+        f"Example: 'Done. Draft -> Hi [Name], Dr. {owner} clinic: 6-month check-up due. {offer_str}. Reply 1 to book. Send to lapsed patients?'"
     ) if is_action else (
         "Continue the conversation naturally. Honor what the merchant said. Move forward."
     )
