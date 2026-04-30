@@ -28,7 +28,11 @@ START_TIME = time.time()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup logic
-    logger.info("VERA Bot starting up...")
+    import os
+    g_key = os.environ.get("GEMINI_API_KEY", "")
+    logger.info("VERA Bot starting up... Key present: %s", bool(g_key))
+    if g_key:
+        logger.info("Key starts with: %s...", g_key[:6])
     yield
     # Shutdown logic
     logger.info("VERA Bot shutting down...")

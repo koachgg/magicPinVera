@@ -211,7 +211,9 @@ async def compose_reply(
 
 async def call_llm(system: str, user: str) -> Optional[str]:
     api_key = os.environ.get("GEMINI_API_KEY", "")
-    if not api_key: return None
+    if not api_key: 
+        logger.warning("call_llm: No GEMINI_API_KEY found in environment")
+        return None
     try:
         genai.configure(api_key=api_key)
         model = genai.GenerativeModel(model_name=GEMINI_MODEL_NAME, system_instruction=system)
