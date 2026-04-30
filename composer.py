@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 # ── LLM Configuration ─────────────────────────────────────────────────────────
 
-GEMINI_MODEL_NAME = "gemini-flash-latest"
+GEMINI_MODEL_NAME = "gemini-2.0-flash"
 GROQ_MODEL = "llama-3.3-70b-versatile"
 GROQ_ENDPOINT = "https://api.groq.com/openai/v1/chat/completions"
 GEMINI_TIMEOUT = 8.0
@@ -212,7 +212,8 @@ async def call_llm(system: str, user: str) -> Optional[str]:
         )
         if response and response.text: return response.text
         return await _call_groq(system, user)
-    except Exception:
+    except Exception as e:
+        logger.warning("Gemini call failed: %s", e)
         return await _call_groq(system, user)
 
 async def _call_groq(system: str, user: str) -> Optional[str]:
