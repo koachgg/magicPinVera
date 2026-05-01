@@ -186,7 +186,7 @@ VOICE RULES: {voice}{vocab_section}
 PEER BENCHMARKS: {json.dumps(peer_stats)}
 
 NON-NEGOTIABLE OUTPUT RULES:
-- Body max 320 characters. Count carefully. Trim ruthlessly if needed.
+- STRICT LENGTH RULE: Body MUST be between 150 and 320 characters. Do NOT output a body shorter than 150 characters. To reach this length, you MUST include the owner's name, a specific number from their performance stats, full details of their active offer, and the specific CTA ask.
 - No URLs anywhere in the body. No http, no www, no links.
 - No invented facts. Only use numbers/names/offers/sources from the context provided.
 - One CTA only. Make it a yes/no, single-tap, or slot-choice action.
@@ -309,7 +309,7 @@ Trigger kind: {kind} | Urgency: {trigger.get('urgency')} | Expires: {trigger.get
 
 Now compose the message. Remember:
 - ONE signal, ONE hook, ONE CTA
-- Max 320 chars, no URLs
+- STRICT LENGTH RULE: Body MUST be between 150 and 320 characters. Use context numbers and offer details to ensure it is >150 chars. No URLs.
 - Ground every fact in the context above
 - Use owner/customer name, real numbers, real offer prices
 - If research trigger: cite source at end"""
@@ -353,7 +353,7 @@ CONTEXT:
 
 INSTRUCTIONS:
 {action_instruction}
-- Keep body under 320 characters. No URLs.
+- STRICT LENGTH RULE: Body MUST be between 150 and 320 characters. Use context numbers to ensure it is >150 chars. No URLs.
 - One CTA only.
 - Only use facts from context above. Never invent facts.
 - Do NOT re-introduce yourself as Vera.

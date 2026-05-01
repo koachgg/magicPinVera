@@ -3,7 +3,7 @@
     "status": 200,
     "body": {
       "status": "ok",
-      "uptime_seconds": 70,
+      "uptime_seconds": 12,
       "contexts_loaded": {
         "category": 0,
         "merchant": 0,
@@ -37,24 +37,24 @@
     "status": 200,
     "body": {
       "accepted": true,
-      "ack_id": "ack_dentists_v10",
-      "stored_at": "2026-04-30T18:40:50.944335+00:00"
+      "ack_id": "ack_dentists_v11",
+      "stored_at": "2026-04-30T19:03:13.409545+00:00"
     }
   },
   "STEP 3 - Merchant": {
     "status": 200,
     "body": {
       "accepted": true,
-      "ack_id": "ack_m_001_v10",
-      "stored_at": "2026-04-30T18:40:51.176058+00:00"
+      "ack_id": "ack_m_001_v11",
+      "stored_at": "2026-04-30T19:03:13.637727+00:00"
     }
   },
   "STEP 4 - Trigger": {
     "status": 200,
     "body": {
       "accepted": true,
-      "ack_id": "ack_trg_v10_v10",
-      "stored_at": "2026-04-30T18:40:51.409421+00:00"
+      "ack_id": "ack_trg_v11_v11",
+      "stored_at": "2026-04-30T19:03:13.864020+00:00"
     }
   },
   "STEP 5 - Tick": {
@@ -62,21 +62,21 @@
     "body": {
       "actions": [
         {
-          "conversation_id": "conv_m_001_trg_v10",
+          "conversation_id": "conv_m_001_trg_v11",
           "merchant_id": "m_001",
           "customer_id": null,
           "send_as": "vera",
-          "trigger_id": "trg_v10",
+          "trigger_id": "trg_v11",
           "template_name": "vera_research_digest_v1",
           "template_params": [
             "Meera",
-            "Dr. Meera, 3-mo fluoride recall cuts caries 38% in high-risk adults - 2100 patients studied. Want to",
+            "Dr. Meera, 3-mo fluoride recall cuts caries 38% in high-risk adults. Consider our \u20b9299 Dental Cleani",
             "binary_yes_no"
           ],
-          "body": "Dr. Meera, 3-mo fluoride recall cuts caries 38% in high-risk adults - 2100 patients studied. Want to offer \u20b9299 Dental Cleaning to your 78 lapsed patients?",
+          "body": "Dr. Meera, 3-mo fluoride recall cuts caries 38% in high-risk adults. Consider our \u20b9299 Dental Cleaning offer. \u2014 JIDA Oct 2026 p.14",
           "cta": "binary_yes_no",
-          "suppression_key": "research:dentists:v10",
-          "rationale": "The research finding on fluoride recall is the hook, and the CTA is a concrete offer to reactivate lapsed patients, addressing the stale_posts and ctr_below_peer_median signals."
+          "suppression_key": "research:dentists:v11",
+          "rationale": "The research finding on fluoride recall reducing caries is the hook, and the concrete offer from Dr. Meera's clinic is the ask, making it a clear and relevant call to action."
         }
       ]
     }
@@ -85,9 +85,9 @@
     "status": 200,
     "body": {
       "action": "send",
-      "body": "Done. Draft -> Hi, Dr. Meera clinic: Dental Cleaning @ Rs.299. Reply 1 to book. Send to 78 lapsed patients?",
-      "cta": "binary_yes_no",
-      "rationale": "Merchant confirmed drafting the patient WhatsApp, switching to action mode to send the drafted message to lapsed patients."
+      "body": "Done. Draft -> Hi [Name], your 6-month check is due at Dr. Meera's. Dental Cleaning @ Rs.299 this week. Reply 1 to book your slot.",
+      "cta": "binary_confirm_cancel",
+      "rationale": "Merchant confirmed drafting the patient WhatsApp, switching to action mode and including the drafted text in the response body."
     }
   },
   "STEP 7 - Auto 1": {
@@ -111,8 +111,8 @@
     "status": 200,
     "body": {
       "accepted": true,
-      "ack_id": "ack_trg_ipl_v10_v10",
-      "stored_at": "2026-04-30T18:40:54.390445+00:00"
+      "ack_id": "ack_trg_ipl_v11_v11",
+      "stored_at": "2026-04-30T19:03:16.521159+00:00"
     }
   },
   "STEP 9 - IPL Tick": {
@@ -125,7 +125,7 @@
     "status": 200,
     "body": {
       "status": "ok",
-      "uptime_seconds": 75,
+      "uptime_seconds": 17,
       "contexts_loaded": {
         "category": 1,
         "merchant": 1,
