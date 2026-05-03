@@ -150,9 +150,10 @@ async def reply(body: ReplyBody):
     result = await compose_reply(
         conversation_id=body.conversation_id,
         merchant_id=merchant_id,
-        customer_id=None,
+        customer_id=body.customer_id,
         message=body.message,
-        turn_number=body.turn_number
+        turn_number=body.turn_number,
+        from_role=body.from_role or "merchant"
     )
 
     if result.get("action") == "end":

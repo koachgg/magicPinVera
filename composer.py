@@ -143,6 +143,7 @@ async def compose_reply(
     customer_id: Optional[str],
     message: str,
     turn_number: int,
+    from_role: str = "merchant",
 ) -> dict:
     """Handles all /v1/reply scenarios with full spec compliance."""
     history = get_turns(conversation_id)
@@ -185,6 +186,8 @@ async def compose_reply(
     # 3. Intent transition
     is_action = any(p in msg_lower for p in _ACTION_PHRASES)
 
+    customer_data = get("customer", customer_id) if customer_id else None
+
     # 4. LLM Generation
     system_prompt = build_system_prompt(category_slug, category_data)
     user_prompt = build_reply_prompt(
@@ -194,6 +197,8 @@ async def compose_reply(
         category_slug=category_slug,
         category=category_data,
         is_action=is_action,
+        from_role=from_role,
+        customer=customer_data,
     )
 
     response_text = await call_llm(system_prompt, user_prompt)
@@ -277,7 +282,10 @@ def build_fallback_action(merchant_data: dict, trigger: dict, merchant_id: str) 
     identity = merchant_data.get("identity", {})
     owner = identity.get("owner_first_name", "") or identity.get("name", "Merchant")
     offers = [o["title"] for o in merchant_data.get("offers", []) if o.get("status") == "active"]
-    offer_str = offers[0] if offers else "your best offer"
+    offer_str = offers[0] if offers else "best offer"
+    trigger_kind = trigger.get("kind", "generic")
+    lapsed_count = merchant_data.get("customer_aggregate", {}).get("lapsed", 0)
+    
     return {
         "conversation_id": f"conv_{merchant_id}_{trigger.get('id')}",
         "merchant_id": merchant_id,
@@ -286,7 +294,7 @@ def build_fallback_action(merchant_data: dict, trigger: dict, merchant_id: str) 
         "trigger_id": trigger.get("id"),
         "template_name": "vera_fallback_v1",
         "template_params": [owner, offer_str],
-        "body": f"{owner}, your {offer_str} is live — want to push it?",
+        "body": f"{owner}, {trigger_kind} signal detected. Your {offer_str} is live — want me to push it to your {lapsed_count} lapsed customers?",
         "cta": "binary_yes_no",
         "suppression_key": trigger.get("suppression_key", ""),
         "rationale": "LLM fallback",

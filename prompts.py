@@ -82,10 +82,9 @@ _KIND_INSTRUCTIONS: dict[str, str] = {
     ),
     "recall": (
         "TRIGGER TYPE: recall_due. This is a customer-facing message. "
-        "Reference the customer's last visit date, the service they received, "
-        "their preferred slot, and the merchant's active offer price. "
-        "Use natural Hinglish if customer language_pref is 'hi-en mix'. "
-        "Zero shame framing — just a warm nudge."
+        "Hook: '{customer_name}'s last visit was {last_visit}. Their {preferred_slot} slot is free this week.' "
+        "Fact: use customer.relationship.last_visit, customer.preferences.preferred_slots, merchant active offer price. "
+        "CTA: binary slot choice ('Reply 1 for Tue, 2 for Thu')."
     ),
     "spike": (
         "TRIGGER TYPE: perf_spike. Celebrate the specific win with exact numbers. "
@@ -95,8 +94,10 @@ _KIND_INSTRUCTIONS: dict[str, str] = {
     ),
     "dip": (
         "TRIGGER TYPE: perf_dip. Do NOT panic. Reframe with peer comparison data. "
-        "Acknowledge the dip but propose one specific recovery action with a real offer. "
-        "Loss aversion framing: 'X customers viewed but didn't call this week.'"
+        "Hook: 'Views down {delta_7d.views_pct}% this week vs peer median {peer_stats.avg_ctr}' "
+        "Fact: use actual delta numbers, peer comparison. "
+        "CTA: 'Want me to push your {offer} to {lapsed_count} lapsed customers to recover?' "
+        "NOTE: Do NOT be alarmist. Reframe as opportunity."
     ),
     "festival": (
         "TRIGGER TYPE: festival_upcoming. Name the festival explicitly. "
@@ -145,9 +146,10 @@ _KIND_INSTRUCTIONS: dict[str, str] = {
         "Use real event name. Operator language only — no fluff."
     ),
     "competitor": (
-        "TRIGGER TYPE: competitor_opened nearby. Use loss aversion + specificity. "
-        "Reference the merchant's actual differentiators from context. "
-        "One concrete defense action (offer, post, SMS blast)."
+        "TRIGGER TYPE: competitor_opened nearby. "
+        "Hook: 'A new {category} opened in {locality}.' "
+        "Fact: use merchant rating, review count vs implied competitor. "
+        "CTA: 'Want to run a loyalty offer this week to lock in your regulars?'"
     ),
     "milestone": (
         "TRIGGER TYPE: milestone_reached. Celebrate the specific milestone (number, date). "
@@ -155,8 +157,8 @@ _KIND_INSTRUCTIONS: dict[str, str] = {
         "Keep it warm and motivating."
     ),
     "generic": (
-        "TRIGGER TYPE: general. Pick the single strongest signal from merchant context. "
-        "One hook, one ask. Do NOT summarize all context — choose ONE angle."
+        "TRIGGER TYPE: unknown/generic. "
+        "Use this format: '{owner_name}, {trigger.kind} signal detected. Your {active_offer} is live — want me to push it to your {lapsed_count} lapsed customers?'"
     ),
 }
 
@@ -324,6 +326,8 @@ def build_reply_prompt(
     category_slug: str,
     category: dict,
     is_action: bool = False,
+    from_role: str = "merchant",
+    customer: dict | None = None,
 ) -> str:
     """Build a prompt for continuing a conversation with a merchant."""
     identity = merchant.get("identity", {})
@@ -341,6 +345,32 @@ def build_reply_prompt(
     ) if is_action else (
         "Continue the conversation naturally. Honor what the merchant said. Move forward."
     )
+
+    if from_role == "customer":
+        cust_name = customer.get("identity", {}).get("name", "Customer") if customer else "Customer"
+        lang_pref = customer.get("identity", {}).get("language_pref", "english") if customer else "english"
+        
+        return f"""You are acting on behalf of {identity.get('name')}, replying to a customer named {cust_name}.
+
+CONTEXT:
+- Merchant Name: {identity.get('name')}
+- Customer Name: {cust_name}
+- Customer Language Pref: {lang_pref}
+- Active Offer: {offer_str}
+- Latest Customer Message: "{message}"
+- Conversation History: {json.dumps(history[-5:], indent=2)}
+
+INSTRUCTIONS:
+- Voice: merchant speaking to customer (warm, service-oriented).
+- If customer picks a slot: confirm it with date, time, price. Example: "Hi {cust_name}, your Wed 5 Nov 6pm slot is confirmed at {identity.get('name')}. {offer_str}. See you then! 🙏"
+- Use language preference: {lang_pref}
+- STRICT LENGTH RULE: Body MUST be between 150 and 320 characters. Use context numbers to ensure it is >150 chars. No URLs.
+- One CTA only.
+
+Respond ONLY with valid JSON. Three valid schemas:
+{{"action": "send", "body": "...", "cta": "open_ended | binary_yes_no | binary_confirm_cancel | none", "rationale": "..."}}
+or {{"action": "wait", "wait_seconds": 86400, "rationale": "..."}}
+or {{"action": "end", "rationale": "..."}}"""
 
     return f"""You are Vera, magicpin's AI assistant, continuing a conversation with {owner}.
 
