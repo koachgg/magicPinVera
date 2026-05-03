@@ -215,30 +215,38 @@ async def compose_reply(
 # ── LLM callers ───────────────────────────────────────────────────────────────
 
 async def call_llm(system: str, user: str) -> Optional[str]:
-    api_key = os.environ.get("GEMINI_API_KEY", "")
-    if not api_key: 
-        logger.warning("call_llm: No GEMINI_API_KEY found in environment")
-        return None
-    try:
-        genai.configure(api_key=api_key)
-        model = genai.GenerativeModel(model_name=GEMINI_MODEL_NAME, system_instruction=system)
-        loop = asyncio.get_event_loop()
-        response = await loop.run_in_executor(
-            None,
-            lambda: model.generate_content(
-                user,
-                generation_config=genai.types.GenerationConfig(temperature=0.1, max_output_tokens=1024, response_mime_type="application/json"),
-                safety_settings={"HARM_CATEGORY_HARASSMENT": "BLOCK_NONE", "HARM_CATEGORY_HATE_SPEECH": "BLOCK_NONE", "HARM_CATEGORY_SEXUALLY_EXPLICIT": "BLOCK_NONE", "HARM_CATEGORY_DANGEROUS_CONTENT": "BLOCK_NONE"}
+    api_keys_raw = os.environ.get("GEMINI_API_KEY", "")
+    if not api_keys_raw:
+        logger.warning("call_llm: No GEMINI_API_KEY found")
+        return await _call_groq(system, user)
+    
+    api_keys = [k.strip() for k in api_keys_raw.split(",") if k.strip()]
+    
+    for i, key in enumerate(api_keys):
+        try:
+            genai.configure(api_key=key)
+            model = genai.GenerativeModel(model_name=GEMINI_MODEL_NAME, system_instruction=system)
+            loop = asyncio.get_event_loop()
+            response = await loop.run_in_executor(
+                None,
+                lambda: model.generate_content(
+                    user,
+                    generation_config=genai.types.GenerationConfig(temperature=0.1, max_output_tokens=1024, response_mime_type="application/json"),
+                    safety_settings={"HARM_CATEGORY_HARASSMENT": "BLOCK_NONE", "HARM_CATEGORY_HATE_SPEECH": "BLOCK_NONE", "HARM_CATEGORY_SEXUALLY_EXPLICIT": "BLOCK_NONE", "HARM_CATEGORY_DANGEROUS_CONTENT": "BLOCK_NONE"}
+                )
             )
-        )
-        if response and response.text: return response.text
-        return await _call_groq(system, user)
-    except Exception as e:
-        if "429" in str(e):
-            logger.warning("Gemini rate limit hit (429), falling back to Groq")
-        else:
-            logger.warning("Gemini call failed: %s", e)
-        return await _call_groq(system, user)
+            if response and response.text:
+                return response.text
+        except Exception as e:
+            if "429" in str(e):
+                logger.warning("Gemini Key %d rate limit hit (429), trying next key...", i+1)
+                continue
+            else:
+                logger.warning("Gemini Key %d failed: %s", i+1, e)
+                continue
+
+    # All Gemini keys failed or rate-limited
+    return await _call_groq(system, user)
 
 async def _call_groq(system: str, user: str) -> Optional[str]:
     api_key = os.environ.get("GROQ_API_KEY", "")
