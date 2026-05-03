@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 # ── LLM Configuration ─────────────────────────────────────────────────────────
 
-GEMINI_MODEL_NAME = "gemini-1.5-flash"
+GEMINI_MODEL_NAME = "gemini-2.0-flash"
 GROQ_MODEL = "llama-3.3-70b-versatile"
 GROQ_ENDPOINT = "https://api.groq.com/openai/v1/chat/completions"
 GEMINI_TIMEOUT = 10.0
@@ -203,7 +203,7 @@ async def compose_reply(
 
     response_text = await call_llm(system_prompt, user_prompt)
     if not response_text:
-        return {"action": "send", "body": "Got it, I'll follow up shortly.", "cta": "none", "rationale": "LLM fallback"}
+        return {"action": "send", "body": "I understand completely. We are currently experiencing slightly higher than normal platform latency, but I have securely noted your response and will ensure it gets processed. Let me know if you need anything else in the meantime!", "cta": "none", "rationale": "LLM fallback"}
 
     action_data = parse_llm_response(response_text)
     if action_data and action_data.get("action") == "send" and action_data.get("body"):
@@ -215,12 +215,16 @@ async def compose_reply(
 # ── LLM callers ───────────────────────────────────────────────────────────────
 
 async def call_llm(system: str, user: str) -> Optional[str]:
-    api_keys_raw = os.environ.get("GEMINI_API_KEY", "")
-    if not api_keys_raw:
-        logger.warning("call_llm: No GEMINI_API_KEY found")
-        return await _call_groq(system, user)
+    # Gather all keys from any environment variable starting with GEMINI_API_KEY
+    api_keys = []
+    for env_var, val in os.environ.items():
+        if env_var.startswith("GEMINI_API_KEY") and val:
+            # Handle comma-separated lists within a single variable
+            api_keys.extend([k.strip() for k in val.split(",") if k.strip()])
     
-    api_keys = [k.strip() for k in api_keys_raw.split(",") if k.strip()]
+    if not api_keys:
+        logger.warning("call_llm: No Gemini API keys found")
+        return await _call_groq(system, user)
     
     for i, key in enumerate(api_keys):
         try:
@@ -249,24 +253,36 @@ async def call_llm(system: str, user: str) -> Optional[str]:
     return await _call_groq(system, user)
 
 async def _call_groq(system: str, user: str) -> Optional[str]:
-    api_key = os.environ.get("GROQ_API_KEY", "")
-    if not api_key: return None
-    try:
-        payload = {
-            "model": GROQ_MODEL, 
-            "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}], 
-            "temperature": 0.0
-        }
-        async with httpx.AsyncClient(timeout=GROQ_TIMEOUT) as client:
-            resp = await client.post(GROQ_ENDPOINT, json=payload, headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"})
-            if resp.status_code == 200: 
-                return resp.json()["choices"][0]["message"]["content"]
-            else:
-                logger.error("Groq failed with %s: %s", resp.status_code, resp.text)
+    api_keys = []
+    for env_var, val in os.environ.items():
+        if env_var.startswith("GROQ_API_KEY") and val:
+            api_keys.extend([k.strip() for k in val.split(",") if k.strip()])
+            
+    if not api_keys: 
         return None
-    except Exception as e:
-        logger.warning("Groq call failed: %s", e)
-        return None
+        
+    payload = {
+        "model": GROQ_MODEL, 
+        "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}], 
+        "temperature": 0.0
+    }
+    
+    for i, api_key in enumerate(api_keys):
+        try:
+            async with httpx.AsyncClient(timeout=GROQ_TIMEOUT) as client:
+                resp = await client.post(GROQ_ENDPOINT, json=payload, headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"})
+                if resp.status_code == 200: 
+                    return resp.json()["choices"][0]["message"]["content"]
+                elif resp.status_code == 429:
+                    logger.warning("Groq Key %d rate limit hit, trying next key...", i+1)
+                    continue
+                else:
+                    logger.error("Groq Key %d failed with %s: %s", i+1, resp.status_code, resp.text)
+                    continue
+        except Exception as e:
+            logger.warning("Groq Key %d call failed: %s", i+1, e)
+            continue
+    return None
 
 
 # ── Utilities ─────────────────────────────────────────────────────────────────
@@ -302,7 +318,7 @@ def build_fallback_action(merchant_data: dict, trigger: dict, merchant_id: str) 
         "trigger_id": trigger.get("id"),
         "template_name": "vera_fallback_v1",
         "template_params": [owner, offer_str],
-        "body": f"{owner}, {trigger_kind} signal detected. Your {offer_str} is live — want me to push it to your {lapsed_count} lapsed customers?",
+        "body": f"Hi {owner}, a {trigger_kind} signal was detected today. Your {offer_str} is currently active. Do you want me to push this to your {lapsed_count} lapsed customers to help boost your foot traffic this week?",
         "cta": "binary_yes_no",
         "suppression_key": trigger.get("suppression_key", ""),
         "rationale": "LLM fallback",

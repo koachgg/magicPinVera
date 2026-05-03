@@ -188,7 +188,7 @@ VOICE RULES: {voice}{vocab_section}
 PEER BENCHMARKS: {json.dumps(peer_stats)}
 
 NON-NEGOTIABLE OUTPUT RULES:
-- STRICT LENGTH RULE: Body MUST be between 150 and 320 characters. Do NOT output a body shorter than 150 characters. To reach this length, you MUST include the owner's name, a specific number from their performance stats, full details of their active offer, and the specific CTA ask.
+- STRICT LENGTH RULE: Body MUST be between 150 and 320 characters. Do NOT output a body shorter than 150 characters. To reach this length, you MUST explicitly include the owner's name, at least one specific performance number from context (e.g. view counts, CTR %), and full details of their active offer.
 - No URLs anywhere in the body. No http, no www, no links.
 - No invented facts. Only use numbers/names/offers/sources from the context provided.
 - One CTA only. Make it a yes/no, single-tap, or slot-choice action.
