@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 # ── LLM Configuration ─────────────────────────────────────────────────────────
 
-GEMINI_MODEL_NAME = "gemini-2.0-flash"
+GEMINI_MODEL_NAME = "gemini-1.5-flash"
 GROQ_MODEL = "llama-3.3-70b-versatile"
 GROQ_ENDPOINT = "https://api.groq.com/openai/v1/chat/completions"
 GEMINI_TIMEOUT = 10.0
