@@ -111,11 +111,11 @@ async def compose(trigger_payload: dict, now: str) -> Optional[dict]:
     # 5. Call LLM
     response_text = await call_llm(system_prompt, user_prompt)
     if not response_text:
-        return build_fallback_action(merchant_data, trigger_payload, merchant_id)
+        return build_fallback_action(merchant_data, trigger_payload, merchant_id, category_slug, digest_item)
 
     action_data = parse_llm_response(response_text)
     if not action_data or not action_data.get("body"):
-        return build_fallback_action(merchant_data, trigger_payload, merchant_id)
+        return build_fallback_action(merchant_data, trigger_payload, merchant_id, category_slug, digest_item)
 
     # 6. Enforce hard constraints
     body_text = enforce_body_constraints(action_data["body"])
@@ -302,13 +302,30 @@ def enforce_body_constraints(body: str) -> str:
     body = re.sub(r"https?://\S+|www\.\S+", "", body)
     return re.sub(r" {2,}", " ", body).strip()[:320]
 
-def build_fallback_action(merchant_data: dict, trigger: dict, merchant_id: str) -> dict:
+def build_fallback_action(merchant_data: dict, trigger: dict, merchant_id: str, category_slug: str = "", digest_item: dict = None) -> dict:
     identity = merchant_data.get("identity", {})
     owner = identity.get("owner_first_name", "") or identity.get("name", "Merchant")
-    offers = [o["title"] for o in merchant_data.get("offers", []) if o.get("status") == "active"]
-    offer_str = offers[0] if offers else "best offer"
+    locality = identity.get("locality", "your area")
+    
+    offers = [o for o in merchant_data.get("offers", []) if o.get("status") == "active"]
+    if offers:
+        offer = offers[0]
+        offer_str = f"{offer.get('title', 'offer')} at {offer.get('price', 'regular price')}"
+        offer_title = offer.get("title", "offer")
+    else:
+        offer_str = "current active offer"
+        offer_title = "offer"
+        
     trigger_kind = trigger.get("kind", "generic")
-    lapsed_count = merchant_data.get("customer_aggregate", {}).get("lapsed", 0)
+    lapsed_count = merchant_data.get("customer_aggregate", {}).get("lapsed_180d_plus", 0)
+    
+    if category_slug == "dentists" and digest_item:
+        citation = f" — {digest_item.get('source', '')}"
+    else:
+        citation = ""
+
+    core_message = f"your {offer_str} is currently live and active on the platform. Would you like me to go ahead and push it out to {lapsed_count} lapsed patients in {locality} to quickly boost your foot traffic this week?"
+    fallback_body = f"Hi {owner}, {core_message}{citation}"
     
     return {
         "conversation_id": f"conv_{merchant_id}_{trigger.get('id')}",
@@ -317,8 +334,8 @@ def build_fallback_action(merchant_data: dict, trigger: dict, merchant_id: str) 
         "send_as": "vera",
         "trigger_id": trigger.get("id"),
         "template_name": "vera_fallback_v1",
-        "template_params": [owner, offer_str],
-        "body": f"Hi {owner}, a {trigger_kind} signal was detected today. Your {offer_str} is currently active. Do you want me to push this to your {lapsed_count} lapsed customers to help boost your foot traffic this week?",
+        "template_params": [owner, offer_title],
+        "body": fallback_body,
         "cta": "binary_yes_no",
         "suppression_key": trigger.get("suppression_key", ""),
         "rationale": "LLM fallback",
